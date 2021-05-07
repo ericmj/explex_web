@@ -539,4 +539,39 @@ defmodule Hexpm.Accounts.Users do
        valid?: false
      }}
   end
+
+  def get_by_github_id(github_user_id) do
+    GitHubAccount
+    |> Repo.get_by(github_user_id: github_user_id)
+    |> Ecto.assoc(:user)
+    |> Repo.one()
+  end
+
+  def create_github_merge_token(github_user_id) do
+    "github_merge_token"
+    |> SingleUseToken.changeset(%{github_user_id: github_user_id})
+    |> Repo.insert(returning: [:token])
+  end
+
+  def link_github_from_token(user, input_token) do
+    %{payload: %{"github_user_id" => gh_user_id}} =
+      token = Repo.get_by(SingleUseToken, token: input_token)
+
+    Multi.new()
+    |> Multi.insert(:github_account, GitHubAccount.build(user, gh_user_id))
+    |> Multi.update(:single_use_token, SingleUseToken.set_used(token))
+    |> Repo.transaction()
+  end
+
+  def link_github_from_id(user, github_id) do
+    user
+    |> GitHubAccount.build(github_id)
+    |> Repo.insert()
+  end
+
+  def unlink_github_account(%User{id: user_id}) do
+    GitHubAccount
+    |> Repo.get_by(user_id: user_id)
+    |> Repo.delete()
+  end
 end
